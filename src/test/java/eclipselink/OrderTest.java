@@ -33,6 +33,8 @@ public class OrderTest {
 	/** TX - with MongoDB ?!? */
 	private EntityTransaction tx;
 	
+	private String id;
+	
 	@BeforeClass public static void setUpPU() {
 		em = Persistence.createEntityManagerFactory("mongodb").createEntityManager();
 	}
@@ -46,16 +48,9 @@ public class OrderTest {
 		tx = em.getTransaction();
 		tx.begin();
 		
-		// test preparation: drop the database
+		// given ...
         DB db = ((MongoConnection)em.unwrap(javax.resource.cci.Connection.class)).getDB();
         db.dropDatabase();
-	}
-	
-	/**
-	 * Uses JPQL query (that gets translated to native MongoDB query.
-	 */
-	@Test public void should_find_by_items_quantity() {
-		// given
 		Order order = new Order("Tobias Trelle");
 		List<Item> items = new ArrayList<Item>();
 		items.add( new Item(1, 47.11, "Item #1") );
@@ -63,16 +58,31 @@ public class OrderTest {
 		order.setItems(items);
 		em.persist(order);
 		em.flush();
-		order = null;
-		
+		id = order.getId();
+	}
+
+	/**
+	 * Uses entity manager primary key lookup.
+	 */
+	@Test public void should_find_by_primary_key() {
 		// when
-		order = em
+		Order order = em.find(Order.class, id);
+		
+		// then
+		assertOrder(order);
+	}
+	
+	/**
+	 * Uses JPQL query (that gets translated to native MongoDB query.
+	 */
+	@Test public void should_find_by_items_quantity() {
+		// when
+		Order order = em
 				.createQuery("SELECT o FROM Order o JOIN o.items i WHERE i.quantity = 2", Order.class)
 				.getSingleResult();
 		
 		// then
-		assertNotNull( order );
-		assertEquals( 2, order.getItems().size() );
+		assertOrder(order);
 	}
 
 	/**
@@ -82,27 +92,13 @@ public class OrderTest {
 	 * Note that EclipseLink converts the names of collections field to upper case.
 	 */
 	@Test public void should_find_by_primary_with_native_query() {
-		// given
-		Order order = new Order("Tobias Trelle");
-		List<Item> items = new ArrayList<Item>();
-		String id;
-		
-		items.add( new Item(1, 47.11, "Item #1") );
-		items.add( new Item(2, 42.0, "Item #2") );
-		order.setItems(items);
-		em.persist(order);
-		em.flush();
-		id = order.getId();
-		order = null;
-		
 		// when
-		order = (Order)em
+		Order order = (Order)em
 				.createNativeQuery("db.ORDER.findOne({_id: \"" + id + "\"})", Order.class)
 				.getSingleResult();
 		
 		// then
-		assertNotNull( order );
-		assertEquals( 2, order.getItems().size() );
+		assertOrder(order);
 	}
 	
 	/**
@@ -110,25 +106,13 @@ public class OrderTest {
 	 * to work properly, they raise an error.
 	 */
 	@Ignore public void should_find_by_items_quantity_with_native_query() {
-		// given
-		Order order = new Order("Tobias Trelle");
-		List<Item> items = new ArrayList<Item>();
-		
-		items.add( new Item(1, 47.11, "Item #1") );
-		items.add( new Item(2, 42.0, "Item #2") );
-		order.setItems(items);
-		em.persist(order);
-		em.flush();
-		order = null;
-		
 		// when
-		order = (Order)em
+		Order order = (Order)em
 				.createNativeQuery("db.ORDER.findOne({\"ITEMS.QUANTITY\": 2})", Order.class)
 				.getSingleResult();
 		
 		// then
-		assertNotNull( order );
-		assertEquals( 2, order.getItems().size() );
+		assertOrder(order);
 	}
 	
 	@After public void tearDown() {
@@ -140,4 +124,10 @@ public class OrderTest {
 			em.close();
 		}
 	}
+	
+	private static void assertOrder(Order order) {
+		assertNotNull( order );
+		assertEquals( 2, order.getItems().size() );	
+	}
+	
 }
